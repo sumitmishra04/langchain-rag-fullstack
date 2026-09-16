@@ -11,7 +11,8 @@ wheels/
 
 # Environment variables (API keys)
 .env
-.env.*
+.env.local
+.env.*.local
 
 # Frontend dependencies
 frontend/node_modules/
