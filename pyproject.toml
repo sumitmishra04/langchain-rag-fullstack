@@ -1,0 +1,31 @@
+[project]
+name = "complete-agentic-ai-bootcamp-with-langgraph-and-langchain"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Sumit Mishra", email = "smishra@rocketlane.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "langchain>=1.4.1",
+    "langchain-chroma>=1.1.0",
+    "langchain-community>=0.4.2",
+    "langchain-core>=1.6.3",
+    "langchain-huggingface>=1.2.2",
+    "langchain-ollama>=1.1.0",
+    "langchain-openai>=1.6.2",
+    "langchain-pinecone>=0.2.13",
+    "langgraph>=1.2.11",
+    "langserve[all]>=0.3.3",
+    "pinecone-client>=6.0.0",
+    "python-dotenv>=1.2.3",
+    "sentence-transformers>=6.0.1",
+]
+
+[project.scripts]
+complete-agentic-ai-bootcamp-with-langgraph-and-langchain = "complete_agentic_ai_bootcamp_with_langgraph_and_langchain:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

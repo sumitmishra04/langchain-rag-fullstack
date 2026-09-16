@@ -1,0 +1,254 @@
+{
+  "store": {
+    "name": "ShopNest",
+    "established": 2018,
+    "headquarters": "San Francisco, CA"
+  },
+  "categories": [
+    {
+      "id": "cat-001",
+      "name": "Electronics",
+      "description": "Gadgets, devices, and accessories for everyday tech needs.",
+      "products": [
+        {
+          "id": "prod-001",
+          "name": "UltraSound Wireless Headphones",
+          "brand": "SoundWave",
+          "price": 149.99,
+          "stock": 320,
+          "rating": 4.6,
+          "description": "Premium over-ear wireless headphones with 40-hour battery life, active noise cancellation, and foldable design. Compatible with all Bluetooth 5.0 devices.",
+          "specs": {
+            "battery": "40 hours",
+            "connectivity": "Bluetooth 5.0",
+            "weight": "250g",
+            "colors": ["Midnight Black", "Pearl White", "Navy Blue"]
+          },
+          "reviews": [
+            {
+              "user": "alex_m",
+              "rating": 5,
+              "comment": "Best headphones I have ever owned. The noise cancellation is phenomenal and battery lasts forever.",
+              "date": "2024-03-12"
+            },
+            {
+              "user": "priya_k",
+              "rating": 4,
+              "comment": "Great sound quality. Slightly tight on the ears after 3 hours but otherwise excellent.",
+              "date": "2024-04-01"
+            }
+          ]
+        },
+        {
+          "id": "prod-002",
+          "name": "ProTab X10 Tablet",
+          "brand": "TechCore",
+          "price": 499.99,
+          "stock": 85,
+          "rating": 4.3,
+          "description": "10.5-inch tablet with AMOLED display, 128GB storage, 8GB RAM, and stylus support. Ideal for professionals and students.",
+          "specs": {
+            "display": "10.5 inch AMOLED",
+            "storage": "128GB",
+            "ram": "8GB",
+            "battery": "8000mAh",
+            "os": "Android 14"
+          },
+          "reviews": [
+            {
+              "user": "techie_sam",
+              "rating": 5,
+              "comment": "Incredible display and very fast. The stylus support makes it perfect for note-taking.",
+              "date": "2024-05-20"
+            },
+            {
+              "user": "jenna_r",
+              "rating": 3,
+              "comment": "Good tablet but gets warm during heavy use. Camera is just average.",
+              "date": "2024-06-08"
+            }
+          ]
+        },
+        {
+          "id": "prod-003",
+          "name": "SmartCharge 65W GaN Charger",
+          "brand": "VoltEdge",
+          "price": 39.99,
+          "stock": 900,
+          "rating": 4.8,
+          "description": "Compact GaN charger with 65W output, supports USB-C PD and USB-A fast charging. Charges laptops, tablets, and phones simultaneously.",
+          "specs": {
+            "output": "65W",
+            "ports": ["USB-C", "USB-A"],
+            "compatibility": ["MacBook", "iPad", "iPhone", "Android"],
+            "size": "Pocket-sized"
+          },
+          "reviews": [
+            {
+              "user": "nomad_dev",
+              "rating": 5,
+              "comment": "Replaced three chargers with this one. Incredibly compact and charges my MacBook at full speed.",
+              "date": "2024-02-14"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat-002",
+      "name": "Home & Kitchen",
+      "description": "Smart and essential products for your home and kitchen.",
+      "products": [
+        {
+          "id": "prod-004",
+          "name": "BrewMaster Pro Coffee Maker",
+          "brand": "BrewMaster",
+          "price": 89.99,
+          "stock": 210,
+          "rating": 4.5,
+          "description": "12-cup programmable coffee maker with built-in grinder, keep-warm plate, and brew-strength control. Supports whole beans and ground coffee.",
+          "specs": {
+            "capacity": "12 cups",
+            "grinder": "built-in burr grinder",
+            "programmable": true,
+            "keep_warm": "2 hours"
+          },
+          "reviews": [
+            {
+              "user": "coffee_addict",
+              "rating": 5,
+              "comment": "Makes the best coffee I have had at home. The built-in grinder is a game changer.",
+              "date": "2024-01-30"
+            },
+            {
+              "user": "morning_person",
+              "rating": 4,
+              "comment": "Works great. The grinder is slightly loud but the coffee quality is worth it.",
+              "date": "2024-03-22"
+            }
+          ]
+        },
+        {
+          "id": "prod-005",
+          "name": "AirPure 360 Air Purifier",
+          "brand": "CleanAir",
+          "price": 199.99,
+          "stock": 140,
+          "rating": 4.7,
+          "description": "HEPA air purifier covering up to 500 sq ft. Removes 99.97% of dust, pollen, smoke, and allergens. Quiet sleep mode and auto air quality sensor.",
+          "specs": {
+            "coverage": "500 sq ft",
+            "filter": "True HEPA H13",
+            "noise_level": "22dB in sleep mode",
+            "modes": ["Auto", "Sleep", "Turbo"]
+          },
+          "reviews": [
+            {
+              "user": "allergy_relief",
+              "rating": 5,
+              "comment": "My allergies have significantly improved since I started using this. Quiet at night too.",
+              "date": "2024-04-18"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat-003",
+      "name": "Sports & Fitness",
+      "description": "Equipment and accessories to support an active lifestyle.",
+      "products": [
+        {
+          "id": "prod-006",
+          "name": "FitTrack Smart Watch",
+          "brand": "FitTrack",
+          "price": 129.99,
+          "stock": 450,
+          "rating": 4.4,
+          "description": "Advanced fitness smartwatch with heart rate monitor, SpO2 tracking, GPS, sleep tracking, and 7-day battery life. Water resistant up to 50 meters.",
+          "specs": {
+            "battery": "7 days",
+            "water_resistance": "50 meters",
+            "sensors": ["Heart rate", "SpO2", "GPS", "Accelerometer"],
+            "compatibility": ["iOS", "Android"]
+          },
+          "reviews": [
+            {
+              "user": "runner_raj",
+              "rating": 5,
+              "comment": "Accurate GPS and the heart rate monitor is spot on. Battery easily lasts a week.",
+              "date": "2024-05-05"
+            },
+            {
+              "user": "gym_daily",
+              "rating": 4,
+              "comment": "Great watch for the price. The app could use some improvement but the hardware is solid.",
+              "date": "2024-06-01"
+            }
+          ]
+        },
+        {
+          "id": "prod-007",
+          "name": "PowerGrip Adjustable Dumbbells",
+          "brand": "IronSet",
+          "price": 249.99,
+          "stock": 60,
+          "rating": 4.9,
+          "description": "Space-saving adjustable dumbbells ranging from 5 to 50 lbs per dumbbell. Selector dial adjusts weight in 5 lb increments. Includes storage tray.",
+          "specs": {
+            "weight_range": "5 to 50 lbs",
+            "increment": "5 lbs",
+            "material": "Steel and ABS plastic",
+            "includes": ["2 dumbbells", "2 storage trays"]
+          },
+          "reviews": [
+            {
+              "user": "home_gym_hero",
+              "rating": 5,
+              "comment": "Replaced an entire rack of dumbbells. The dial mechanism is smooth and reliable.",
+              "date": "2024-02-28"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "orders": [
+    {
+      "order_id": "ord-1001",
+      "customer": "alex_m",
+      "date": "2024-06-15",
+      "status": "Delivered",
+      "items": [
+        { "product_id": "prod-001", "quantity": 1, "price": 149.99 },
+        { "product_id": "prod-003", "quantity": 2, "price": 39.99 }
+      ],
+      "total": 229.97,
+      "shipping": "Standard 5-day"
+    },
+    {
+      "order_id": "ord-1002",
+      "customer": "jenna_r",
+      "date": "2024-06-20",
+      "status": "Shipped",
+      "items": [
+        { "product_id": "prod-002", "quantity": 1, "price": 499.99 },
+        { "product_id": "prod-006", "quantity": 1, "price": 129.99 }
+      ],
+      "total": 629.98,
+      "shipping": "Express 2-day"
+    },
+    {
+      "order_id": "ord-1003",
+      "customer": "home_gym_hero",
+      "date": "2024-07-01",
+      "status": "Processing",
+      "items": [
+        { "product_id": "prod-007", "quantity": 1, "price": 249.99 },
+        { "product_id": "prod-005", "quantity": 1, "price": 199.99 }
+      ],
+      "total": 449.98,
+      "shipping": "Standard 5-day"
+    }
+  ]
+}
