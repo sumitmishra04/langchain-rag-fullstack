@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000"
+
 const DOCS = [
   { id: 'story', label: 'Story', description: 'The Tortoise and the Rabbit' },
   { id: 'ecomm', label: 'Ecommerce', description: 'ShopNest product catalog' },
@@ -19,7 +21,7 @@ export default function App() {
     setError('')
 
     try {
-      const res = await fetch(`http://localhost:8000/${selectedDoc}/invoke`, {
+      const res = await fetch(`${API_BASE}/${selectedDoc}/invoke`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: question }),
