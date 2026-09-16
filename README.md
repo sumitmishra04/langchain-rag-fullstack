@@ -260,6 +260,50 @@ curl -X POST http://localhost:8000/ecomm/invoke \
 
 ---
 
+## Deployment
+
+### Backend — Render Web Service
+
+1. Go to [render.com](https://render.com) → **New** → **Web Service**
+2. Connect GitHub repo `langchain-rag-fullstack`
+3. Render auto-detects the `Procfile` and sets the start command
+4. Add environment variables in the **Environment** tab:
+   ```
+   OPENAI_API_KEY=sk-...
+   PINECONE_API_KEY=...
+   ```
+5. Click **Deploy**
+
+Backend URL: `https://langchain-rag-fullstack.onrender.com`
+
+### Frontend — Render Static Site
+
+1. Go to Render → **New** → **Static Site**
+2. Connect the same GitHub repo
+3. Set:
+   - **Root Directory:** `frontend`
+   - **Build Command:** `npm install; npm run build`
+   - **Publish Directory:** `dist`
+4. Click **Deploy**
+
+Frontend URL: `https://langchain-rag-fullstack-1.onrender.com`
+
+### Keep the backend alive — UptimeRobot
+
+Render's free tier spins down after 15 minutes of inactivity. The first request after sleep takes ~30-50 seconds. To prevent this:
+
+1. Go to [uptimerobot.com](https://uptimerobot.com) → Sign up free
+2. Click **+ Add New Monitor**
+3. Set:
+   - **Monitor Type:** HTTP(s)
+   - **URL:** `https://langchain-rag-fullstack.onrender.com/docs`
+   - **Interval:** 5 minutes
+4. Click **Create Monitor**
+
+UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely. It also sends email alerts if the service goes down.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -271,3 +315,5 @@ curl -X POST http://localhost:8000/ecomm/invoke \
 | LLM | OpenAI `gpt-4o-mini` |
 | API server | FastAPI + LangServe |
 | Frontend | React + Vite + Tailwind CSS |
+| Hosting | Render (backend + frontend) |
+| Uptime monitoring | UptimeRobot |
