@@ -1,6 +1,6 @@
-# RAG Demo with LangChain, Pinecone & LangServe
+# ShopNest RAG — LangChain, Pinecone & Supabase
 
-A beginner-friendly project that shows how to build a **Retrieval-Augmented Generation (RAG)** pipeline from scratch and serve it as an API.
+A fullstack **Retrieval-Augmented Generation (RAG)** ecommerce assistant with session-based chat history, token-aware context trimming, and a floating React chat UI.
 
 ---
 
@@ -46,25 +46,27 @@ User Question  → convert to vector → find closest chunks → send to LLM →
 ```python
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from langserve import add_routes
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_pinecone import PineconeVectorStore
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, trim_messages
 from langchain_core.output_parsers import StrOutputParser
-from dotenv import load_dotenv
 ```
 
 - `FastAPI` — the web framework that runs our server
 - `CORSMiddleware` — allows the browser (React frontend) to talk to this server
-- `add_routes` — from LangServe, turns a LangChain chain into a REST endpoint automatically
 - `OpenAIEmbeddings` — converts text into vectors using OpenAI
 - `ChatOpenAI` — the LLM that generates the final answer
 - `PineconeVectorStore` — connects to Pinecone where our vectors are stored
-- `ChatPromptTemplate` — creates a reusable prompt with placeholders
-- `RunnablePassthrough` — passes the user's question through unchanged
+- `ChatPromptTemplate`, `MessagesPlaceholder` — creates a reusable prompt with structured message slots
+- `RunnablePassthrough` — passes the input dict through while optionally adding new keys
+- `RunnableWithMessageHistory` — wraps a chain to automatically fetch and persist chat history
+- `BaseChatMessageHistory` — base class for implementing a custom history store
+- `HumanMessage`, `AIMessage`, `trim_messages` — message types and token-aware history trimming
 - `StrOutputParser` — extracts plain text from the LLM response
-- `load_dotenv` — reads your `.env` file so API keys are available
 
 ---
 
@@ -93,13 +95,14 @@ This creates the web server. Everything else is registered onto this `app`.
 ```python
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://langchain-rag-fullstack-1.onrender.com"],
+    allow_origin_regex=r"http://localhost:.*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
 ```
 
-Browsers block requests from one address (e.g. `localhost:5173`) to a different address (e.g. `localhost:8000`) by default. This middleware tells the browser "it's okay, allow all origins". This is needed so the React frontend can call our server.
+Allows requests from the deployed frontend and any localhost port during development.
 
 ---
 
@@ -111,7 +114,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 ```
 
 - `gpt-4o-mini` — the model that reads the retrieved chunks and writes the answer
-- `text-embedding-3-small` — the model that converts text to vectors. Must be the same model used during ingestion, otherwise the vectors won't match
+- `text-embedding-3-small` — converts text to vectors. Must match the model used during ingestion
 
 ---
 
@@ -125,8 +128,8 @@ ecomm_store = PineconeVectorStore.from_existing_index(
 ecomm_retriever = ecomm_store.as_retriever(search_kwargs={"k": 3})
 ```
 
-- `from_existing_index` — connects to a Pinecone index we already populated using `ecomm_ingestion.py`
-- `as_retriever(k=3)` — when given a question, find the 3 most relevant chunks using cosine similarity
+- `from_existing_index` — connects to a Pinecone index already populated via `ecomm_ingestion.py`
+- `as_retriever(k=3)` — finds the 3 most relevant product chunks using cosine similarity
 
 ---
 
@@ -134,7 +137,10 @@ ecomm_retriever = ecomm_store.as_retriever(search_kwargs={"k": 3})
 
 ```python
 ecomm_chain = (
-    {"context": ecomm_retriever, "question": RunnablePassthrough()}
+    RunnablePassthrough.assign(
+        context=lambda x: ecomm_retriever.invoke(x["question"]),
+        history=lambda x: trimmer.invoke(x["history"]),
+    )
     | ecomm_prompt
     | llm
     | StrOutputParser()
@@ -143,26 +149,28 @@ ecomm_chain = (
 
 This is **LCEL (LangChain Expression Language)**. The `|` pipe passes output from one step to the next:
 
-1. The question goes to the retriever (which fetches relevant chunks) and also passes through as-is
-2. The chunks and question are injected into the prompt template
+1. `RunnablePassthrough.assign` — adds `context` (Pinecone results) and trims `history` to 1000 tokens
+2. The prompt is filled with `context`, trimmed `history`, and the `question`
 3. The filled prompt is sent to GPT-4o-mini
 4. The LLM response is converted to a plain string
 
 ---
 
-### Step 8: Register routes with LangServe
+### Step 8: Wrap with history management
 
 ```python
-add_routes(app, ecomm_chain, path="/ecomm")
+chain_with_history = RunnableWithMessageHistory(
+    ecomm_chain,
+    lambda session_id: SupabaseChatMessageHistory(session_id),
+    input_messages_key="question",
+    history_messages_key="history",
+)
 ```
 
-`add_routes` is the magic of LangServe. One line gives you:
-
-| Endpoint | What it does |
-|---|---|
-| `POST /ecomm/invoke` | Send a question, get an answer |
-| `POST /ecomm/stream` | Same but streams the response word by word |
-| `GET /ecomm/playground` | Browser UI to test the chain interactively |
+`RunnableWithMessageHistory` automatically:
+1. Fetches past messages from Supabase before each chain run
+2. Injects them as structured `HumanMessage`/`AIMessage` objects under `"history"`
+3. Persists the new user message and assistant answer after each run
 
 ---
 
@@ -183,19 +191,19 @@ if __name__ == "__main__":
 
 ## Chat History with Supabase
 
-The app stores every conversation in a **Supabase Postgres database** so chat history survives page refreshes and can support multiple sessions in the future.
+The app stores every conversation in a **Supabase Postgres database** so chat history survives page refreshes and supports multiple named sessions.
 
 ### How it works
 
 ```
-Page loads  →  GET /session  →  load (or create) the latest session + all its messages
-User sends  →  POST /chat    →  save user msg → fetch last 10 msgs as context → run RAG → save answer → return answer
-+ button    →  POST /session →  create a brand new empty session
-Clock icon  →  GET /sessions →  list all sessions with date + first-message preview
-Session click → GET /session/{id} → load that session's full message history
+Page loads    →  GET /session       →  load the latest session + its messages (empty state if none)
+User sends    →  POST /chat         →  RunnableWithMessageHistory fetches history → runs RAG → persists both messages → returns answer
+New chat btn  →  clears UI lazily   →  POST /session created on first message send
+Clock icon    →  GET /sessions      →  list all sessions with date + first-message preview
+Session click →  GET /session/{id}  →  load that session's full message history
 ```
 
-The LLM receives the last 10 messages as **Chat History** in its prompt, so it can answer follow-up questions naturally ("tell me more about that one", "which is cheaper?").
+The LLM receives the most recent **1000 tokens** of chat history (token-trimmed, not a fixed count), passed as structured `HumanMessage`/`AIMessage` objects — not a raw string.
 
 ### Database Schema
 
@@ -222,10 +230,11 @@ create table messages (
 
 | Method | Endpoint | What it does |
 |---|---|---|
-| `GET` | `/session` | Load latest session (creates one if none exist) |
+| `GET` | `/session` | Load latest session (returns empty if none exist) |
 | `POST` | `/session` | Create a new empty session |
 | `GET` | `/sessions` | List all sessions with date + first message preview |
 | `GET` | `/session/{id}` | Load all messages for a specific session |
+| `DELETE` | `/session/{id}` | Delete a session and all its messages |
 | `POST` | `/chat` | Send a message, get a history-aware RAG answer |
 
 `POST /chat` request body:
@@ -316,21 +325,19 @@ Frontend runs at `http://localhost:5173`
 ## How to query the API directly
 
 ```bash
-# Ask about products (stateless, via LangServe)
-curl -X POST http://localhost:8000/ecomm/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"input": "Which headphones have the best battery life?"}'
-
-# Ask with chat history (session-aware)
+# Send a chat message (session-aware, history-managed)
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"session_id": "your-session-uuid", "question": "Which is cheapest?"}'
+  -d '{"session_id": "your-session-uuid", "question": "Which headphones have the best battery life?"}'
 
 # Create a new session
 curl -X POST http://localhost:8000/session
 
 # List all past sessions
 curl http://localhost:8000/sessions
+
+# Load a specific session's messages
+curl http://localhost:8000/session/your-session-uuid
 ```
 
 ---
@@ -378,7 +385,7 @@ Render's free tier spins down after 15 minutes of inactivity. The first request 
    - **Interval:** 5 minutes
 4. Click **Create Monitor**
 
-UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely. It also sends email alerts if the service goes down.
+UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely.
 
 ---
 
@@ -391,8 +398,9 @@ UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely. It
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Vector store | Pinecone |
 | LLM | OpenAI `gpt-4o-mini` |
-| Chat history | Supabase (Postgres) |
-| API server | FastAPI + LangServe |
+| Chat history | Supabase (Postgres) via `RunnableWithMessageHistory` |
+| Context trimming | LangChain `trim_messages` (token-aware) |
+| API server | FastAPI |
 | Frontend | React + Vite + Tailwind CSS |
 | Hosting | Render (backend + frontend) |
 | Uptime monitoring | UptimeRobot |

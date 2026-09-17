@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
-from langserve import add_routes
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_pinecone import PineconeVectorStore
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, trim_messages
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 
@@ -18,7 +20,8 @@ app = FastAPI(title="ShopNest RAG", description="Ecommerce RAG pipeline")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://langchain-rag-fullstack-1.onrender.com"],
+    allow_origin_regex=r"http://localhost:.*",
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
@@ -41,14 +44,12 @@ def get_products():
 
 @app.get("/session")
 def get_default_session():
-    """Load the most recent session, or create one if none exist."""
+    """Load the most recent session, or return empty if none exist."""
     result = supabase.table("sessions").select("id").order("created_at", desc=True).limit(1).execute()
-    if result.data:
-        session_id = result.data[0]["id"]
-    else:
-        created = supabase.table("sessions").insert({}).execute()
-        session_id = created.data[0]["id"]
+    if not result.data:
+        return {"session_id": None, "messages": []}
 
+    session_id = result.data[0]["id"]
     msgs = (
         supabase.table("messages")
         .select("role, content")
@@ -114,10 +115,42 @@ def delete_session(session_id: str):
     return {"deleted": session_id}
 
 
-# --- Chat endpoint (history-aware) ---
+# --- Chat request model ---
 class ChatRequest(BaseModel):
     session_id: str
     question: str
+
+
+# --- Supabase-backed message history ---
+class SupabaseChatMessageHistory(BaseChatMessageHistory):
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+
+    @property
+    def messages(self) -> list[BaseMessage]:
+        result = (
+            supabase.table("messages")
+            .select("role, content")
+            .eq("session_id", self.session_id)
+            .order("created_at")
+            .execute()
+        )
+        return [
+            HumanMessage(content=m["content"]) if m["role"] == "user"
+            else AIMessage(content=m["content"])
+            for m in result.data
+        ]
+
+    def add_message(self, message: BaseMessage) -> None:
+        role = "user" if isinstance(message, HumanMessage) else "assistant"
+        supabase.table("messages").insert({
+            "session_id": self.session_id,
+            "role": role,
+            "content": message.content,
+        }).execute()
+
+    def clear(self) -> None:
+        supabase.table("messages").delete().eq("session_id", self.session_id).execute()
 
 
 # --- Ecommerce RAG ---
@@ -130,87 +163,48 @@ ecomm_store = PineconeVectorStore.from_existing_index(
 )
 ecomm_retriever = ecomm_store.as_retriever(search_kwargs={"k": 3})
 
-# Simple chain kept for /ecomm/playground
-ecomm_prompt = ChatPromptTemplate.from_template("""
-You are a helpful ecommerce assistant for ShopNest. Answer based only on the product information below.
-Keep answer under 80 words.
+ecomm_prompt = ChatPromptTemplate.from_messages([
+    ("system", """You are a helpful ecommerce assistant for ShopNest. Answer based only on the product information below.
+Keep answer under 100 words.
 
 Product Information:
-{context}
+{context}"""),
+    MessagesPlaceholder(variable_name="history"),
+    ("human", "{question}"),
+])
 
-Question: {question}
-""")
+trimmer = trim_messages(
+    max_tokens=1000,
+    strategy="last",
+    token_counter=llm,
+    include_system=True,
+    start_on="human",
+)
 
 ecomm_chain = (
-    {"context": ecomm_retriever, "question": RunnablePassthrough()}
+    RunnablePassthrough.assign(
+        context=lambda x: ecomm_retriever.invoke(x["question"]),
+        history=lambda x: trimmer.invoke(x["history"]),
+    )
     | ecomm_prompt
     | llm
     | StrOutputParser()
 )
 
-add_routes(app, ecomm_chain, path="/ecomm")
-
-# History-aware chain used by /chat
-ecomm_prompt_with_history = ChatPromptTemplate.from_template("""
-You are a helpful ecommerce assistant for ShopNest. Answer based only on the product information below.
-Keep answer under 100 words.
-
-Product Information:
-{context}
-
-Chat History:
-{history}
-
-Question: {question}
-""")
-
-ecomm_chain_with_history = (
-    {
-        "context": RunnableLambda(lambda x: ecomm_retriever.invoke(x["question"])),
-        "question": RunnableLambda(lambda x: x["question"]),
-        "history": RunnableLambda(lambda x: x["history"]),
-    }
-    | ecomm_prompt_with_history
-    | llm
-    | StrOutputParser()
+chain_with_history = RunnableWithMessageHistory(
+    ecomm_chain,
+    lambda session_id: SupabaseChatMessageHistory(session_id),
+    input_messages_key="question",
+    history_messages_key="history",
 )
 
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    # Load last 10 messages for context
-    msgs_result = (
-        supabase.table("messages")
-        .select("role, content")
-        .eq("session_id", req.session_id)
-        .order("created_at")
-        .execute()
+    answer = chain_with_history.invoke(
+        {"question": req.question},
+        config={"configurable": {"session_id": req.session_id}},
     )
-    recent = msgs_result.data[-10:]
-    history = "\n".join(
-        f"{m['role'].capitalize()}: {m['content']}" for m in recent
-    ) if recent else "No previous conversation."
-
-    # Persist user message
-    supabase.table("messages").insert({
-        "session_id": req.session_id,
-        "role": "user",
-        "content": req.question,
-    }).execute()
-
-    # Run RAG chain with history
-    answer = ecomm_chain_with_history.invoke({
-        "question": req.question,
-        "history": history,
-    })
-
-    # Persist assistant message
-    supabase.table("messages").insert({
-        "session_id": req.session_id,
-        "role": "assistant",
-        "content": answer,
-    }).execute()
-
     return {"answer": answer}
 
 

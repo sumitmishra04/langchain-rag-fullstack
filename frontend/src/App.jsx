@@ -11,6 +11,7 @@ export default function App() {
   const [switchingSession, setSwitchingSession] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sessionLoading, setSessionLoading] = useState(true)
   const [chatOpen, setChatOpen] = useState(true)
   const bottomRef = useRef(null)
 
@@ -33,10 +34,13 @@ export default function App() {
     fetch(`${API_BASE}/session`)
       .then(r => r.json())
       .then(data => {
-        setSessionId(data.session_id)
-        setMessages(data.messages.map(m => ({ role: m.role, text: m.content })))
+        if (data.session_id) {
+          setSessionId(data.session_id)
+          setMessages(data.messages.map(m => ({ role: m.role, text: m.content })))
+        }
       })
       .catch(() => {})
+      .finally(() => setSessionLoading(false))
 
     fetch(`${API_BASE}/sessions`)
       .then(r => r.json())
@@ -296,13 +300,21 @@ export default function App() {
             <>
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-white">
-                {messages.length === 0 && (
+                {sessionLoading ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3">
+                    <svg className="w-6 h-6 text-purple-400 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    <p className="text-xs text-gray-400">Loading conversation...</p>
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-4">
                     <div className="text-3xl">🛍️</div>
                     <p className="text-sm font-medium text-gray-700">Hi! I'm your shopping assistant</p>
                     <p className="text-xs text-gray-400">Ask me about products, specs, prices, or recommendations</p>
                   </div>
-                )}
+                ) : null}
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
