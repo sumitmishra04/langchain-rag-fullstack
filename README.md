@@ -18,16 +18,23 @@ User Question  → convert to vector → find closest chunks → send to LLM →
 ## Project Structure
 
 ```
-├── story.txt               # Sample document (Tortoise & Rabbit story)
-├── ecomm_data.json         # Sample document (ecommerce product catalog)
-├── story_ingestion.py      # Load, chunk, embed and store story in Pinecone
-├── ecomm_ingestion.py      # Load, chunk, embed and store ecomm data in Pinecone
-├── story_retrieval.py      # Ask questions about the story
-├── ecomm_retrieval.py      # Ask questions about products
-├── local_rag.py            # Fully local RAG using HuggingFace + Chroma + Ollama
-├── server.py               # FastAPI server exposing both pipelines as REST APIs
-├── frontend/               # React + Tailwind UI to interact with the API
-└── requirements.txt        # Python dependencies
+├── backend/
+│   ├── server.py               # FastAPI server — RAG chain, session, chat endpoints
+│   ├── ecomm_data.json         # Ecommerce product catalog (9 products, 3 categories)
+│   ├── requirements.txt        # Python dependencies
+│   ├── Procfile                # Render start command
+│   └── practice/               # Learning scripts (ingestion, retrieval, local RAG)
+│       ├── story.txt
+│       ├── story_ingestion.py
+│       ├── story_retrieval.py
+│       ├── ecomm_ingestion.py
+│       ├── ecomm_retrieval.py
+│       └── local_rag.py
+└── frontend/
+    ├── src/
+    │   ├── App.jsx             # React app — product grid + floating chat
+    │   └── index.css           # Tailwind + animated card border styles
+    └── .env.production         # VITE_API_URL pointing to Render backend
 ```
 
 ---
@@ -67,14 +74,14 @@ from dotenv import load_dotenv
 load_dotenv()
 ```
 
-This reads `OPENAI_API_KEY` and `PINECONE_API_KEY` from your `.env` file. Without this, neither OpenAI nor Pinecone will work.
+This reads `OPENAI_API_KEY`, `PINECONE_API_KEY`, `SUPABASE_URL`, and `SUPABASE_KEY` from your `.env` file.
 
 ---
 
 ### Step 3: Create the FastAPI app
 
 ```python
-app = FastAPI(title="RAG Server")
+app = FastAPI(title="ShopNest RAG")
 ```
 
 This creates the web server. Everything else is registered onto this `app`.
@@ -108,42 +115,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 ---
 
-### Step 6: Connect to Pinecone (Story)
-
-```python
-story_store = PineconeVectorStore.from_existing_index(
-    index_name="langchain-learn-rag",
-    embedding=embeddings
-)
-story_retriever = story_store.as_retriever(search_kwargs={"k": 3})
-```
-
-- `from_existing_index` — connects to a Pinecone index we already populated using `story_ingestion.py`
-- `as_retriever(k=3)` — when given a question, find the 3 most relevant chunks using cosine similarity
-
----
-
-### Step 7: Build the Story RAG chain
-
-```python
-story_chain = (
-    {"context": story_retriever, "question": RunnablePassthrough()}
-    | story_prompt
-    | llm
-    | StrOutputParser()
-)
-```
-
-This is **LCEL (LangChain Expression Language)**. The `|` pipe passes output from one step to the next. Here is what happens when a user sends a question:
-
-1. `{"context": story_retriever, "question": RunnablePassthrough()}` — the question goes to the retriever (which fetches relevant chunks) and also passes through as-is
-2. `| story_prompt` — the chunks and question are injected into the prompt template
-3. `| llm` — the filled prompt is sent to GPT-4o-mini
-4. `| StrOutputParser()` — the LLM response is converted to a plain string
-
----
-
-### Step 8: Same thing for Ecommerce
+### Step 6: Connect to Pinecone
 
 ```python
 ecomm_store = PineconeVectorStore.from_existing_index(
@@ -151,7 +123,16 @@ ecomm_store = PineconeVectorStore.from_existing_index(
     embedding=embeddings
 )
 ecomm_retriever = ecomm_store.as_retriever(search_kwargs={"k": 3})
+```
 
+- `from_existing_index` — connects to a Pinecone index we already populated using `ecomm_ingestion.py`
+- `as_retriever(k=3)` — when given a question, find the 3 most relevant chunks using cosine similarity
+
+---
+
+### Step 7: Build the RAG chain
+
+```python
 ecomm_chain = (
     {"context": ecomm_retriever, "question": RunnablePassthrough()}
     | ecomm_prompt
@@ -160,14 +141,18 @@ ecomm_chain = (
 )
 ```
 
-Same pattern, but pointing to a different Pinecone index that stores product data.
+This is **LCEL (LangChain Expression Language)**. The `|` pipe passes output from one step to the next:
+
+1. The question goes to the retriever (which fetches relevant chunks) and also passes through as-is
+2. The chunks and question are injected into the prompt template
+3. The filled prompt is sent to GPT-4o-mini
+4. The LLM response is converted to a plain string
 
 ---
 
-### Step 9: Register routes with LangServe
+### Step 8: Register routes with LangServe
 
 ```python
-add_routes(app, story_chain, path="/story")
 add_routes(app, ecomm_chain, path="/ecomm")
 ```
 
@@ -175,23 +160,95 @@ add_routes(app, ecomm_chain, path="/ecomm")
 
 | Endpoint | What it does |
 |---|---|
-| `POST /story/invoke` | Send a question, get an answer |
-| `POST /story/stream` | Same but streams the response word by word |
-| `GET /story/playground` | Browser UI to test the chain interactively |
+| `POST /ecomm/invoke` | Send a question, get an answer |
+| `POST /ecomm/stream` | Same but streams the response word by word |
+| `GET /ecomm/playground` | Browser UI to test the chain interactively |
 
 ---
 
-### Step 10: Run the server
+### Step 9: Run the server
 
 ```python
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 ```
 
 - `uvicorn` — a fast web server that runs FastAPI apps
 - `host="0.0.0.0"` — makes the server accessible from outside the machine (not just localhost)
-- `port=8000` — the port to listen on
+- `PORT` env var — Render injects this automatically; falls back to 8000 locally
+
+---
+
+## Chat History with Supabase
+
+The app stores every conversation in a **Supabase Postgres database** so chat history survives page refreshes and can support multiple sessions in the future.
+
+### How it works
+
+```
+Page loads  →  GET /session  →  load (or create) the latest session + all its messages
+User sends  →  POST /chat    →  save user msg → fetch last 10 msgs as context → run RAG → save answer → return answer
++ button    →  POST /session →  create a brand new empty session
+Clock icon  →  GET /sessions →  list all sessions with date + first-message preview
+Session click → GET /session/{id} → load that session's full message history
+```
+
+The LLM receives the last 10 messages as **Chat History** in its prompt, so it can answer follow-up questions naturally ("tell me more about that one", "which is cheaper?").
+
+### Database Schema
+
+Two tables in Supabase:
+
+```sql
+-- One row per conversation
+create table sessions (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default now()
+);
+
+-- One row per message
+create table messages (
+  id uuid default gen_random_uuid() primary key,
+  session_id uuid references sessions(id) on delete cascade,
+  role text not null check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamp with time zone default now()
+);
+```
+
+### Session & Chat API endpoints
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `GET` | `/session` | Load latest session (creates one if none exist) |
+| `POST` | `/session` | Create a new empty session |
+| `GET` | `/sessions` | List all sessions with date + first message preview |
+| `GET` | `/session/{id}` | Load all messages for a specific session |
+| `POST` | `/chat` | Send a message, get a history-aware RAG answer |
+
+`POST /chat` request body:
+```json
+{ "session_id": "uuid-here", "question": "Which headphones have ANC?" }
+```
+
+Response:
+```json
+{ "answer": "The UltraSound Wireless Headphones have active noise cancellation..." }
+```
+
+### Setting up Supabase
+
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Go to **SQL Editor** and run the two `CREATE TABLE` statements above (one at a time)
+3. Go to **Settings → General** — copy the **Project URL** (looks like `https://xxxx.supabase.co`)
+4. Go to **Settings → API Keys** — copy the **Secret key** (`sb_secret_...`)
+5. Add both to your `backend/.env`:
+   ```
+   SUPABASE_URL=https://xxxx.supabase.co
+   SUPABASE_KEY=sb_secret_...
+   ```
 
 ---
 
@@ -202,19 +259,23 @@ if __name__ == "__main__":
 - Python 3.12+
 - Node.js 18+
 - OpenAI API key
-- Pinecone API key (with two indexes: `langchain-learn-rag` and `json-rag`, dimension 1536, metric cosine)
+- Pinecone API key (index: `json-rag`, dimension 1536, metric cosine)
+- Supabase project (free tier)
 
 ### 1. Install Python dependencies
 
 ```bash
+cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Create a `.env` file
+### 2. Create a `backend/.env` file
 
 ```
 OPENAI_API_KEY=sk-...
 PINECONE_API_KEY=...
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=sb_secret_...
 
 # Optional: LangSmith tracing
 LANGCHAIN_TRACING_V2=true
@@ -224,18 +285,17 @@ LANGCHAIN_PROJECT=langchain-rag-fullstack
 
 **LangSmith** traces every chain call — retrieval, LLM, prompt — with latency, token usage, inputs and outputs. Get your API key at [smith.langchain.com](https://smith.langchain.com). No code changes needed, just set the env vars.
 
-For Render, add these same variables in the backend service's **Environment** tab.
-
 ### 3. Ingest documents into Pinecone
 
 ```bash
-python story_ingestion.py
-python ecomm_ingestion.py
+cd backend
+python practice/ecomm_ingestion.py
 ```
 
 ### 4. Start the API server
 
 ```bash
+cd backend
 python server.py
 ```
 
@@ -256,15 +316,21 @@ Frontend runs at `http://localhost:5173`
 ## How to query the API directly
 
 ```bash
-# Ask about the story
-curl -X POST http://localhost:8000/story/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"input": "Why did the rabbit lose the race?"}'
-
-# Ask about products
+# Ask about products (stateless, via LangServe)
 curl -X POST http://localhost:8000/ecomm/invoke \
   -H "Content-Type: application/json" \
   -d '{"input": "Which headphones have the best battery life?"}'
+
+# Ask with chat history (session-aware)
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "your-session-uuid", "question": "Which is cheapest?"}'
+
+# Create a new session
+curl -X POST http://localhost:8000/session
+
+# List all past sessions
+curl http://localhost:8000/sessions
 ```
 
 ---
@@ -275,13 +341,16 @@ curl -X POST http://localhost:8000/ecomm/invoke \
 
 1. Go to [render.com](https://render.com) → **New** → **Web Service**
 2. Connect GitHub repo `langchain-rag-fullstack`
-3. Render auto-detects the `Procfile` and sets the start command
-4. Add environment variables in the **Environment** tab:
+3. Set **Root Directory** to `backend`
+4. Render auto-detects the `Procfile` and sets the start command
+5. Add environment variables in the **Environment** tab:
    ```
    OPENAI_API_KEY=sk-...
    PINECONE_API_KEY=...
+   SUPABASE_URL=https://xxxx.supabase.co
+   SUPABASE_KEY=sb_secret_...
    ```
-5. Click **Deploy**
+6. Click **Deploy**
 
 Backend URL: `https://langchain-rag-fullstack.onrender.com`
 
@@ -322,6 +391,7 @@ UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely. It
 | Embeddings | OpenAI `text-embedding-3-small` |
 | Vector store | Pinecone |
 | LLM | OpenAI `gpt-4o-mini` |
+| Chat history | Supabase (Postgres) |
 | API server | FastAPI + LangServe |
 | Frontend | React + Vite + Tailwind CSS |
 | Hosting | Render (backend + frontend) |
