@@ -17,6 +17,7 @@
           "price": 149.99,
           "stock": 320,
           "rating": 4.6,
+          "image": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=250&fit=crop",
           "description": "Premium over-ear wireless headphones with 40-hour battery life, active noise cancellation, and foldable design. Compatible with all Bluetooth 5.0 devices.",
           "specs": {
             "battery": "40 hours",
@@ -46,6 +47,7 @@
           "price": 499.99,
           "stock": 85,
           "rating": 4.3,
+          "image": "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400&h=250&fit=crop",
           "description": "10.5-inch tablet with AMOLED display, 128GB storage, 8GB RAM, and stylus support. Ideal for professionals and students.",
           "specs": {
             "display": "10.5 inch AMOLED",
@@ -76,6 +78,7 @@
           "price": 39.99,
           "stock": 900,
           "rating": 4.8,
+          "image": "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&h=250&fit=crop",
           "description": "Compact GaN charger with 65W output, supports USB-C PD and USB-A fast charging. Charges laptops, tablets, and phones simultaneously.",
           "specs": {
             "output": "65W",
@@ -89,6 +92,37 @@
               "rating": 5,
               "comment": "Replaced three chargers with this one. Incredibly compact and charges my MacBook at full speed.",
               "date": "2024-02-14"
+            }
+          ]
+        },
+        {
+          "id": "prod-008",
+          "name": "NovaSmart X15 Smartphone",
+          "brand": "NovaTech",
+          "price": 799.99,
+          "stock": 150,
+          "rating": 4.5,
+          "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&h=250&fit=crop",
+          "description": "Flagship 6.7-inch OLED smartphone with 200MP camera, 5G connectivity, 256GB storage, and 5000mAh battery. Features in-display fingerprint sensor and 120Hz refresh rate.",
+          "specs": {
+            "display": "6.7 inch OLED 120Hz",
+            "camera": "200MP main + 12MP ultra-wide",
+            "storage": "256GB",
+            "battery": "5000mAh",
+            "connectivity": "5G"
+          },
+          "reviews": [
+            {
+              "user": "photo_lover",
+              "rating": 5,
+              "comment": "The camera is absolutely insane. Best photos I have taken on any phone.",
+              "date": "2024-07-10"
+            },
+            {
+              "user": "daily_driver",
+              "rating": 4,
+              "comment": "Smooth performance and great battery life. A little pricey but worth it.",
+              "date": "2024-07-22"
             }
           ]
         }
@@ -106,6 +140,7 @@
           "price": 89.99,
           "stock": 210,
           "rating": 4.5,
+          "image": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=250&fit=crop",
           "description": "12-cup programmable coffee maker with built-in grinder, keep-warm plate, and brew-strength control. Supports whole beans and ground coffee.",
           "specs": {
             "capacity": "12 cups",
@@ -135,6 +170,7 @@
           "price": 199.99,
           "stock": 140,
           "rating": 4.7,
+          "image": "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=400&h=250&fit=crop",
           "description": "HEPA air purifier covering up to 500 sq ft. Removes 99.97% of dust, pollen, smoke, and allergens. Quiet sleep mode and auto air quality sensor.",
           "specs": {
             "coverage": "500 sq ft",
@@ -165,6 +201,7 @@
           "price": 129.99,
           "stock": 450,
           "rating": 4.4,
+          "image": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=250&fit=crop",
           "description": "Advanced fitness smartwatch with heart rate monitor, SpO2 tracking, GPS, sleep tracking, and 7-day battery life. Water resistant up to 50 meters.",
           "specs": {
             "battery": "7 days",
@@ -194,6 +231,7 @@
           "price": 249.99,
           "stock": 60,
           "rating": 4.9,
+          "image": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=250&fit=crop",
           "description": "Space-saving adjustable dumbbells ranging from 5 to 50 lbs per dumbbell. Selector dial adjusts weight in 5 lb increments. Includes storage tray.",
           "specs": {
             "weight_range": "5 to 50 lbs",
@@ -207,6 +245,35 @@
               "rating": 5,
               "comment": "Replaced an entire rack of dumbbells. The dial mechanism is smooth and reliable.",
               "date": "2024-02-28"
+            }
+          ]
+        },
+        {
+          "id": "prod-009",
+          "name": "FlexBand Pro Resistance Bands",
+          "brand": "FlexFit",
+          "price": 34.99,
+          "stock": 600,
+          "rating": 4.6,
+          "image": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&h=250&fit=crop",
+          "description": "Set of 5 resistance bands ranging from 10 to 50 lbs. Made from 100% natural latex. Includes carry bag, handles, ankle straps, and door anchor.",
+          "specs": {
+            "resistance_levels": ["10 lbs", "20 lbs", "30 lbs", "40 lbs", "50 lbs"],
+            "material": "100% natural latex",
+            "includes": ["5 bands", "2 handles", "2 ankle straps", "1 door anchor", "carry bag"]
+          },
+          "reviews": [
+            {
+              "user": "yoga_daily",
+              "rating": 5,
+              "comment": "Perfect for home workouts. Great quality bands that have not snapped after 6 months of daily use.",
+              "date": "2024-06-15"
+            },
+            {
+              "user": "physio_grad",
+              "rating": 4,
+              "comment": "Good range of resistance levels. The door anchor could be sturdier but the bands themselves are excellent.",
+              "date": "2024-07-03"
             }
           ]
         }

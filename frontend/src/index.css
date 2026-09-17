@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+/* Animated agentic border on product card hover */
+.product-card {
+  position: relative;
+  border-radius: 14px;
+  /* NO overflow:hidden here — it clips the ::before pseudo-element */
+}
+
+.product-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  background: linear-gradient(270deg, #f43f5e, #a855f7, #06b6d4, #10b981, #f59e0b, #f43f5e);
+  background-size: 400% 400%;
+  animation: agenticBorder 3s linear infinite;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.product-card:hover::before {
+  opacity: 1;
+}
+
+.product-card-inner {
+  position: relative;
+  z-index: 1;
+  background: white;
+  border-radius: 13px;
+  overflow: hidden; /* clips image corners */
+  height: 100%;
+}
+
+@keyframes agenticBorder {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
