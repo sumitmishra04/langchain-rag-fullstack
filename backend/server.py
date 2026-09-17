@@ -107,6 +107,13 @@ def load_session(session_id: str):
     return {"session_id": session_id, "messages": msgs.data}
 
 
+@app.delete("/session/{session_id}")
+def delete_session(session_id: str):
+    """Delete a session and all its messages (cascade handled by DB)."""
+    supabase.table("sessions").delete().eq("id", session_id).execute()
+    return {"deleted": session_id}
+
+
 # --- Chat endpoint (history-aware) ---
 class ChatRequest(BaseModel):
     session_id: str

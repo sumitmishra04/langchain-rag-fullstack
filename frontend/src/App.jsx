@@ -8,6 +8,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null)
   const [sessions, setSessions] = useState([])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [switchingSession, setSwitchingSession] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [chatOpen, setChatOpen] = useState(true)
@@ -27,6 +28,7 @@ export default function App() {
       })
   }, [])
 
+  // Load default session + prefetch sessions list on mount
   useEffect(() => {
     fetch(`${API_BASE}/session`)
       .then(r => r.json())
@@ -35,32 +37,51 @@ export default function App() {
         setMessages(data.messages.map(m => ({ role: m.role, text: m.content })))
       })
       .catch(() => {})
+
+    fetch(`${API_BASE}/sessions`)
+      .then(r => r.json())
+      .then(setSessions)
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function openHistory() {
-    const res = await fetch(`${API_BASE}/sessions`)
-    const data = await res.json()
-    setSessions(data)
+  function refreshSessions() {
+    fetch(`${API_BASE}/sessions`).then(r => r.json()).then(setSessions).catch(() => {})
+  }
+
+  // Instant — sessions already loaded on mount
+  function openHistory() {
     setHistoryOpen(true)
   }
 
+  async function deleteSession(e, id) {
+    e.stopPropagation()
+    await fetch(`${API_BASE}/session/${id}`, { method: 'DELETE' })
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (id === sessionId) {
+      setSessionId(null)
+      setMessages([])
+      setHistoryOpen(false)
+    }
+  }
+
   async function switchSession(id) {
+    setSwitchingSession(id)
     const res = await fetch(`${API_BASE}/session/${id}`)
     const data = await res.json()
     setSessionId(data.session_id)
     setMessages(data.messages.map(m => ({ role: m.role, text: m.content })))
+    setSwitchingSession(false)
     setHistoryOpen(false)
   }
 
-  async function newChat() {
-    const res = await fetch(`${API_BASE}/session`, { method: 'POST' })
-    const data = await res.json()
-    setSessionId(data.session_id)
+  function newChat() {
+    // Clear UI immediately — session is created lazily on first message
     setMessages([])
+    setSessionId(null)
     setHistoryOpen(false)
   }
 
@@ -72,13 +93,23 @@ export default function App() {
     setLoading(true)
 
     try {
+      // Create session lazily on first message if none exists
+      let activeSessionId = sessionId
+      if (!activeSessionId) {
+        const s = await fetch(`${API_BASE}/session`, { method: 'POST' })
+        const sData = await s.json()
+        activeSessionId = sData.session_id
+        setSessionId(activeSessionId)
+      }
+
       const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, question }),
+        body: JSON.stringify({ session_id: activeSessionId, question }),
       })
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', text: data.answer ?? JSON.stringify(data) }])
+      refreshSessions()
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Something went wrong. Please try again.' }])
     } finally {
@@ -103,14 +134,14 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
 
       {/* Header */}
-      <div className="px-8 py-5 bg-white border-b border-gray-100">
+      <div className="px-4 sm:px-8 py-5 bg-white border-b border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900">ShopNest</h1>
         <p className="text-sm text-gray-400 mt-0.5">Browse products and ask our AI assistant anything</p>
       </div>
 
       {/* Product Grid */}
-      <div className="px-8 py-6 pb-32">
-        <div className="grid grid-cols-3 gap-5 max-w-5xl mx-auto">
+      <div className="px-4 sm:px-8 py-6 pb-32">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
           {products.map(product => (
             <div key={product.id} className="product-card shadow-sm hover:shadow-lg transition-shadow">
               <div className="product-card-inner">
@@ -136,25 +167,27 @@ export default function App() {
         </div>
       </div>
 
-      {/* Floating Chat Box */}
+      {/* Floating Chat Box
+          Mobile:  full-width bottom sheet, slides up from bottom, rounded top corners
+          Desktop: fixed bottom-right card, fully rounded
+      */}
       {chatOpen && (
-        <div
-          style={{ height: '75vh' }}
-          className="fixed bottom-6 right-6 w-96 rounded-3xl shadow-2xl flex flex-col overflow-hidden z-50"
-        >
+        <div className="
+          fixed z-50 flex flex-col overflow-hidden shadow-2xl
+          bottom-0 left-0 right-0 h-[85vh] rounded-t-3xl
+          sm:bottom-6 sm:left-auto sm:right-6 sm:w-96 sm:h-[75vh] sm:rounded-3xl
+        ">
           {/* Chat Header */}
           <div
             className="px-5 py-4 flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}
           >
             {historyOpen ? (
-              /* History header */
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setHistoryOpen(false)}
                   className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
                 >
-                  {/* Back arrow */}
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                     <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
                   </svg>
@@ -172,7 +205,6 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              /* Normal header */
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
                   AI
@@ -182,7 +214,6 @@ export default function App() {
                   <p className="text-white/70 text-xs">Ask me anything about products</p>
                 </div>
                 <div className="ml-auto flex items-center gap-2">
-                  {/* History */}
                   <button
                     onClick={openHistory}
                     title="View history"
@@ -192,7 +223,6 @@ export default function App() {
                       <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clipRule="evenodd" />
                     </svg>
                   </button>
-                  {/* New chat */}
                   <button
                     onClick={newChat}
                     title="New chat"
@@ -203,7 +233,6 @@ export default function App() {
                     </svg>
                   </button>
                   <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                  {/* Close */}
                   <button
                     onClick={() => setChatOpen(false)}
                     className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
@@ -230,15 +259,32 @@ export default function App() {
                     <button
                       key={s.id}
                       onClick={() => switchSession(s.id)}
+                      disabled={!!switchingSession}
                       className={`w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors ${
                         s.id === sessionId ? 'bg-purple-50' : ''
-                      }`}
+                      } ${switchingSession === s.id ? 'opacity-60' : ''}`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs text-gray-400">{formatDate(s.created_at)}</span>
-                        {s.id === sessionId && (
-                          <span className="text-xs font-medium text-purple-500">Active</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {switchingSession === s.id ? (
+                            <svg className="w-3.5 h-3.5 text-purple-400 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                            </svg>
+                          ) : s.id === sessionId ? (
+                            <span className="text-xs font-medium text-purple-500">Active</span>
+                          ) : null}
+                          <button
+                            onClick={(e) => deleteSession(e, s.id)}
+                            className="w-5 h-5 flex items-center justify-center text-gray-300 hover:text-red-400 transition-colors"
+                            title="Delete conversation"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+                              <path fillRule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 013.878.512.75.75 0 11-.256 1.478l-.209-.035-1.005 13.07a3 3 0 01-2.991 2.77H8.084a3 3 0 01-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 01-.256-1.478A48.567 48.567 0 017.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 013.369 0c1.603.051 2.815 1.387 2.815 2.951zm-6.136-1.452a51.196 51.196 0 013.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 00-6 0v-.113c0-.794.609-1.428 1.364-1.452zm-.355 5.945a.75.75 0 10-1.5.058l.347 9a.75.75 0 101.499-.058l-.346-9zm5.48.058a.75.75 0 10-1.498-.058l-.347 9a.75.75 0 001.5.058l.345-9z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                       <p className="text-sm text-gray-700 truncate">{s.preview}</p>
                     </button>
