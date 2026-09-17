@@ -215,7 +215,16 @@ pip install -r requirements.txt
 ```
 OPENAI_API_KEY=sk-...
 PINECONE_API_KEY=...
+
+# Optional: LangSmith tracing
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=ls__...
+LANGCHAIN_PROJECT=langchain-rag-fullstack
 ```
+
+**LangSmith** traces every chain call — retrieval, LLM, prompt — with latency, token usage, inputs and outputs. Get your API key at [smith.langchain.com](https://smith.langchain.com). No code changes needed, just set the env vars.
+
+For Render, add these same variables in the backend service's **Environment** tab.
 
 ### 3. Ingest documents into Pinecone
 
