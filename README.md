@@ -1,6 +1,8 @@
-# ShopNest RAG — LangChain, Pinecone & Supabase
+# ShopNest RAG — LangChain, Supabase Postgres & pgvector
 
 A fullstack **Retrieval-Augmented Generation (RAG)** ecommerce assistant with session-based chat history, token-aware context trimming, and a floating React chat UI.
+
+Products, chat history **and vectors** all live in one Supabase Postgres database. The original Pinecone-based server is kept as `server_pinecone.py` for reference.
 
 ---
 
@@ -9,8 +11,8 @@ A fullstack **Retrieval-Augmented Generation (RAG)** ecommerce assistant with se
 Normally, an LLM only knows what it was trained on. RAG lets you give the LLM your own documents so it can answer questions about them.
 
 ```
-Your Document → split into chunks → convert to vectors → store in Pinecone
-User Question  → convert to vector → find closest chunks → send to LLM → Answer
+Product rows   → one text block per product → convert to vectors → store in Postgres (pgvector)
+User Question  → convert to vector → find closest products → send to LLM → Answer
 ```
 
 ---
@@ -18,16 +20,20 @@ User Question  → convert to vector → find closest chunks → send to LLM →
 ## Project Structure
 
 ```
+├── .env                        # API keys + DATABASE_URL (not committed)
 ├── backend/
-│   ├── server.py               # FastAPI server — RAG chain, session, chat endpoints
-│   ├── ecomm_data.json         # Ecommerce product catalog (9 products, 3 categories)
+│   ├── server_pg.py            # FastAPI server — RAG chain (pgvector), session, chat endpoints  ← ACTIVE
+│   ├── ingest_pg.py            # Reads the products table, embeds each product, writes to pgvector
+│   ├── server_pinecone.py      # Previous version using Pinecone (kept for reference)
 │   ├── requirements.txt        # Python dependencies
-│   ├── Procfile                # Render start command
+│   ├── Procfile                # Render start command (runs server_pg)
 │   └── practice/               # Learning scripts (ingestion, retrieval, local RAG)
+│       ├── schema.sql          # All Supabase table definitions + pgvector extension
+│       ├── ecomm_data.json     # Original product catalog (9 products, 3 categories) — now seeded into Supabase
 │       ├── story.txt
 │       ├── story_ingestion.py
 │       ├── story_retrieval.py
-│       ├── ecomm_ingestion.py
+│       ├── ecomm_ingestion.py  # Old Pinecone ingestion
 │       ├── ecomm_retrieval.py
 │       └── local_rag.py
 └── frontend/
@@ -39,7 +45,88 @@ User Question  → convert to vector → find closest chunks → send to LLM →
 
 ---
 
-## server.py — Explained Step by Step
+## Vector Store — Pinecone → pgvector (what changed and why)
+
+The first version stored product vectors in **Pinecone**, a separate hosted vector database. The current version stores them in the **same Supabase Postgres database** that already holds products, sessions and messages, using the `pgvector` extension. One database, one place to look, no extra service.
+
+### The change was 5 lines
+
+`server_pg.py` is a copy of `server_pinecone.py` with only the vector store swapped:
+
+```diff
+- from langchain_pinecone import PineconeVectorStore
++ from langchain_postgres import PGVector
+
+- ecomm_store = PineconeVectorStore.from_existing_index(index_name="json-rag", embedding=embeddings)
++ ecomm_store = PGVector(
++     embeddings=embeddings,
++     connection=os.environ["DATABASE_URL"],
++     collection_name="products",
++ )
+```
+
+Everything else — sessions, messages, prompt, chain, endpoints — is identical. Run `diff server_pinecone.py server_pg.py` to see for yourself.
+
+### Two doors into the same database
+
+| | `supabase` client | `PGVector` |
+|---|---|---|
+| Talks over | HTTPS (Supabase REST API) | Direct Postgres connection |
+| Credentials | `SUPABASE_URL` + `SUPABASE_KEY` | `DATABASE_URL` |
+| Used for | products, sessions, messages | the vector table |
+
+pgvector only works over a real Postgres connection, so `DATABASE_URL` is required even though the rest of the app uses the HTTPS client.
+
+### What PGVector creates in the database
+
+Two tables. The names are fixed by LangChain, not configurable:
+
+| Table | Contents |
+|---|---|
+| `langchain_pg_collection` | one row per collection — ours is named `products` |
+| `langchain_pg_embedding` | one row per product: `id` (the product id), `embedding` (1536 numbers), `document` (the product text), `cmetadata` (jsonb) |
+
+Both are created automatically the first time `PGVector` connects. There are never more than these two tables, no matter how many collections you add — a second collection would be another *row* in `langchain_pg_collection`, with its vectors in the same `langchain_pg_embedding` table separated by `collection_id`.
+
+### How ingestion works — `ingest_pg.py`
+
+```
+products table  →  one text block per product  →  OpenAI embeddings  →  langchain_pg_embedding
+```
+
+1. Reads every row from `products` (joined with `categories`) using the Supabase client
+2. Builds one text block per product: name, category, brand, price, stock, rating, description, specs, reviews
+3. `PGVector.add_documents(docs, ids=[product ids])` — one OpenAI call, 9 vectors, 9 rows
+
+Because each vector's `id` **is** the product id, re-running the script **updates** existing rows instead of duplicating them. The row count stays at 9.
+
+### How a question is answered
+
+```
+"Which headphones have the best battery life?"
+   → OpenAI embeds the question into 1536 numbers
+   → SQL: ORDER BY embedding <=> question_vector LIMIT 3     (cosine distance — lower = closer)
+   → the 3 matching product texts go into the prompt as {context}
+   → gpt-4o-mini answers from that context only
+```
+
+The chatbot reads **only** `langchain_pg_embedding` — it never queries the `products` table. The vector table holds its own copy of each product's text (the `document` column).
+
+Vector search always returns the k closest rows, even when only one is truly relevant — the prompt's "answer based only on the product information" instruction is what keeps the LLM from using the noise.
+
+### Adding or changing a product
+
+1. Insert or edit the row in the `products` table (Supabase Table Editor or SQL)
+2. Re-run the ingest so the chatbot sees it:
+   ```bash
+   cd backend && python ingest_pg.py
+   ```
+
+Until step 2 runs, the chatbot cannot see the new product or the new price. Deleting a product leaves its vector behind unless you remove it too: `ecomm_store.delete(ids=["prod-010"])`.
+
+---
+
+## server_pg.py — Explained Step by Step
 
 ### Step 1: Import everything we need
 
@@ -47,7 +134,7 @@ User Question  → convert to vector → find closest chunks → send to LLM →
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_pinecone import PineconeVectorStore
+from langchain_postgres import PGVector
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -60,7 +147,7 @@ from langchain_core.output_parsers import StrOutputParser
 - `CORSMiddleware` — allows the browser (React frontend) to talk to this server
 - `OpenAIEmbeddings` — converts text into vectors using OpenAI
 - `ChatOpenAI` — the LLM that generates the final answer
-- `PineconeVectorStore` — connects to Pinecone where our vectors are stored
+- `PGVector` — connects to the pgvector tables in Supabase Postgres where our vectors are stored
 - `ChatPromptTemplate`, `MessagesPlaceholder` — creates a reusable prompt with structured message slots
 - `RunnablePassthrough` — passes the input dict through while optionally adding new keys
 - `RunnableWithMessageHistory` — wraps a chain to automatically fetch and persist chat history
@@ -76,7 +163,7 @@ from langchain_core.output_parsers import StrOutputParser
 load_dotenv()
 ```
 
-This reads `OPENAI_API_KEY`, `PINECONE_API_KEY`, `SUPABASE_URL`, and `SUPABASE_KEY` from your `.env` file.
+This reads `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, and `DATABASE_URL` from the `.env` file at the project root (`load_dotenv` searches upward from `backend/`).
 
 ---
 
@@ -118,18 +205,20 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 ---
 
-### Step 6: Connect to Pinecone
+### Step 6: Connect to pgvector
 
 ```python
-ecomm_store = PineconeVectorStore.from_existing_index(
-    index_name="json-rag",
-    embedding=embeddings
+ecomm_store = PGVector(
+    embeddings=embeddings,
+    connection=os.environ["DATABASE_URL"],
+    collection_name="products",
 )
 ecomm_retriever = ecomm_store.as_retriever(search_kwargs={"k": 3})
 ```
 
-- `from_existing_index` — connects to a Pinecone index already populated via `ecomm_ingestion.py`
-- `as_retriever(k=3)` — finds the 3 most relevant product chunks using cosine similarity
+- `connection` — the direct Postgres connection string (must start with `postgresql+psycopg://` so SQLAlchemy picks the psycopg driver)
+- `collection_name="products"` — the collection populated by `ingest_pg.py`
+- `as_retriever(k=3)` — finds the 3 most relevant products using cosine distance (`<=>` in SQL)
 
 ---
 
@@ -149,7 +238,7 @@ ecomm_chain = (
 
 This is **LCEL (LangChain Expression Language)**. The `|` pipe passes output from one step to the next:
 
-1. `RunnablePassthrough.assign` — adds `context` (Pinecone results) and trims `history` to 1000 tokens
+1. `RunnablePassthrough.assign` — adds `context` (pgvector results) and trims `history` to 1000 tokens
 2. The prompt is filled with `context`, trimmed `history`, and the `question`
 3. The filled prompt is sent to GPT-4o-mini
 4. The LLM response is converted to a plain string
@@ -226,6 +315,8 @@ create table messages (
 );
 ```
 
+Plus the two vector tables `langchain_pg_collection` and `langchain_pg_embedding`, created automatically by `PGVector` (see the Vector Store section above). The full schema, including the `create extension vector` line, is in `backend/practice/schema.sql`.
+
 ### Session & Chat API endpoints
 
 | Method | Endpoint | What it does |
@@ -253,11 +344,17 @@ Response:
 2. Go to **SQL Editor** and run the two `CREATE TABLE` statements above (one at a time)
 3. Go to **Settings → General** — copy the **Project URL** (looks like `https://xxxx.supabase.co`)
 4. Go to **Settings → API Keys** — copy the **Secret key** (`sb_secret_...`)
-5. Add both to your `backend/.env`:
+5. Add both to the `.env` file at the project root:
    ```
    SUPABASE_URL=https://xxxx.supabase.co
    SUPABASE_KEY=sb_secret_...
    ```
+6. Enable pgvector: **SQL Editor** → run `create extension if not exists vector;`
+7. Get the direct Postgres connection string: click **Connect** (top bar) → **Session pooler** → copy the URI. Replace `[YOUR-PASSWORD]` with your database password, and change the prefix from `postgresql://` to `postgresql+psycopg://`:
+   ```
+   DATABASE_URL=postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-<region>.pooler.supabase.com:5432/postgres
+   ```
+   Use the **Session pooler** host, not the direct `db.xxxx.supabase.co` host — the direct host is IPv6-only and unreachable from most home networks and from Render.
 
 ---
 
@@ -268,8 +365,7 @@ Response:
 - Python 3.12+
 - Node.js 18+
 - OpenAI API key
-- Pinecone API key (index: `json-rag`, dimension 1536, metric cosine)
-- Supabase project (free tier)
+- Supabase project (free tier) with the `vector` extension enabled
 
 ### 1. Install Python dependencies
 
@@ -278,13 +374,13 @@ cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Create a `backend/.env` file
+### 2. Create a `.env` file at the project root
 
 ```
 OPENAI_API_KEY=sk-...
-PINECONE_API_KEY=...
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_KEY=sb_secret_...
+DATABASE_URL=postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-<region>.pooler.supabase.com:5432/postgres
 
 # Optional: LangSmith tracing
 LANGCHAIN_TRACING_V2=true
@@ -294,18 +390,20 @@ LANGCHAIN_PROJECT=langchain-rag-fullstack
 
 **LangSmith** traces every chain call — retrieval, LLM, prompt — with latency, token usage, inputs and outputs. Get your API key at [smith.langchain.com](https://smith.langchain.com). No code changes needed, just set the env vars.
 
-### 3. Ingest documents into Pinecone
+### 3. Ingest products into pgvector
 
 ```bash
 cd backend
-python practice/ecomm_ingestion.py
+python ingest_pg.py
 ```
+
+Creates the two `langchain_pg_*` tables on first run and writes one vector per product. Safe to re-run any time products change.
 
 ### 4. Start the API server
 
 ```bash
 cd backend
-python server.py
+python server_pg.py
 ```
 
 Server runs at `http://localhost:8000`
@@ -353,10 +451,11 @@ curl http://localhost:8000/session/your-session-uuid
 5. Add environment variables in the **Environment** tab:
    ```
    OPENAI_API_KEY=sk-...
-   PINECONE_API_KEY=...
    SUPABASE_URL=https://xxxx.supabase.co
    SUPABASE_KEY=sb_secret_...
+   DATABASE_URL=postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-<region>.pooler.supabase.com:5432/postgres
    ```
+   Without `DATABASE_URL` the server crashes on startup with `KeyError: 'DATABASE_URL'`.
 6. Click **Deploy**
 
 Backend URL: `https://langchain-rag-fullstack.onrender.com`
@@ -393,10 +492,10 @@ UptimeRobot pings the backend every 5 minutes, keeping it awake indefinitely.
 
 | Layer | Technology |
 |---|---|
-| Document loading | LangChain `TextLoader`, `RecursiveJsonSplitter` |
-| Chunking | `RecursiveCharacterTextSplitter` |
-| Embeddings | OpenAI `text-embedding-3-small` |
-| Vector store | Pinecone |
+| Product data | Supabase Postgres `products` table (read via `supabase` client) |
+| Documents | One LangChain `Document` per product, built in `ingest_pg.py` |
+| Embeddings | OpenAI `text-embedding-3-small` (1536 dimensions) |
+| Vector store | Supabase Postgres + `pgvector` via `langchain_postgres.PGVector` |
 | LLM | OpenAI `gpt-4o-mini` |
 | Chat history | Supabase (Postgres) via `RunnableWithMessageHistory` |
 | Context trimming | LangChain `trim_messages` (token-aware) |
