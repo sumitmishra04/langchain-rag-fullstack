@@ -18,15 +18,7 @@ export default function App() {
   useEffect(() => {
     fetch(`${API_BASE}/products`)
       .then(r => r.json())
-      .then(data => {
-        const allProducts = []
-        for (const category of data.categories) {
-          for (const product of category.products) {
-            allProducts.push({ ...product, category: category.name })
-          }
-        }
-        setProducts(allProducts)
-      })
+      .then(setProducts)
   }, [])
 
   // Load default session + prefetch sessions list on mount

@@ -1,4 +1,3 @@
-import json
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,9 +35,15 @@ supabase = create_client(
 # --- Products endpoint ---
 @app.get("/products")
 def get_products():
-    with open("ecomm_data.json", "r") as f:
-        data = json.load(f)
-    return data
+    result = (
+        supabase.table("products")
+        .select("*, categories(name)")
+        .execute()
+    )
+    return [
+        {**p, "category": p.pop("categories")["name"]}
+        for p in result.data
+    ]
 
 # --- Session endpoints ---
 
