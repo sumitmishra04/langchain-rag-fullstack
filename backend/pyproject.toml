@@ -16,9 +16,11 @@ dependencies = [
     "langchain-ollama>=1.1.0",
     "langchain-openai>=1.6.2",
     "langchain-pinecone>=0.2.13",
+    "langchain-postgres>=0.0.15",
     "langgraph>=1.2.11",
     "langserve[all]>=0.3.3",
     "pinecone-client>=6.0.0",
+    "psycopg[binary]>=3.2",
     "python-dotenv>=1.2.3",
     "sentence-transformers>=6.0.1",
 ]

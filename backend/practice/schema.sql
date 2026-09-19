@@ -1,5 +1,8 @@
 -- Run this in Supabase SQL Editor before running seed_supabase.py
 
+-- Vector similarity search support (used by langchain_postgres.PGVector)
+create extension if not exists vector;
+
 create table if not exists categories (
   id text primary key,
   name text not null,
@@ -27,6 +30,19 @@ create table if not exists orders (
   status text not null,
   total numeric(10, 2) not null,
   shipping text
+);
+
+create table if not exists sessions (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now()
+);
+
+create table if not exists messages (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references sessions(id) on delete cascade,
+  role text not null,
+  content text not null,
+  created_at timestamptz default now()
 );
 
 create table if not exists order_items (

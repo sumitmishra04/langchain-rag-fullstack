@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-with open("../ecomm_data.json", "r") as f:
+with open("ecomm_data.json", "r") as f:
     data = json.load(f)
 
 # One document per product — gives clean, semantically rich text per product
